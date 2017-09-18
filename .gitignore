@@ -1,0 +1,12 @@
+/node_modules
+/.idea
+.DS_Store
+.sass-cache
+*.pyc
+*.swp
+*.asd
+
+npm-debug.log
+
+public/index.js
+public/index.css
