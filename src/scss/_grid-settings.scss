@@ -1,0 +1,9 @@
+@import "bourbon";
+@import "neat-helpers";
+
+$max-width: 1920px;
+$mobile-width: 1024px;
+$disable-warnings: true;
+
+$fullsize: new-breakpoint(min-width 1920px);
+$mobile: new-breakpoint(min-width 1024px);

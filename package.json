@@ -4,16 +4,19 @@
   "description": "",
   "license": "Apache-2.0",
   "scripts": {
-    "start": "npm run build-css && npm run budo",
+    "start": "npm run budo",
     "build": "browserify src/js/index.js > public/index.js",
     "buildmin": "browserify -g uglifyify src/js/index.js > public/index.js",
-    "build-css": "node-sass --include-path scss src/scss/index.scss public/index.css",
     "budo": "budo src/js/index.js:index.js --dir ./public --live --verbose --port 3001",
-    "discify": "browserify --full-paths src/js/index.js | discify --open"
+    "discify": "browserify --full-paths src/js/index.js | discify --open",
+    "build-css": "node-sass --include-path node_modules/bourbon/app/assets/stylesheets --include-path node_modules/bourbon-neat/app/assets/stylesheets --include-path src/scss src/scss/index.scss public/index.css -x",
+    "watch-css": "nodemon -e scss -x \"npm run build-css\""
   },
   "dependencies": {
     "bezier-easing": "2.0.3",
-    "eventemitter3": "2.0.2"
+    "eventemitter3": "2.0.2",
+    "bourbon": "^4.2.7",
+    "bourbon-neat": "^1.7.4"
   },
   "devDependencies": {
     "babel-preset-es2015": "^6.16.0",
@@ -23,7 +26,8 @@
     "budo": "^9.4.7",
     "derequire": "^2.0.3",
     "discify": "^1.6.0",
-    "node-sass": "^4.5.3"
+    "node-sass": "^4.5.3",
+    "nodemon": "^1.12.1"
   },
   "browserify": {
     "transform": [

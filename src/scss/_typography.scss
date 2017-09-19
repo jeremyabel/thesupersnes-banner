@@ -1,0 +1,53 @@
+
+@mixin fontSmooth() {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+$base-font-family: 'Open Sans', sans-serif;
+
+$modular-scale-base: 20px;
+
+$base-font-size: modular-scale(0);
+$base-font-weight-light:    300;
+$base-font-weight-regular:  400;
+$base-font-weight-medium:   500;
+
+$body-copy-font-size: modular-scale(0);
+$body-copy-line-height: modular-scale(2);
+
+$header-font-size: modular-scale(5);
+
+h1 {
+	color: #FFF;
+	font-family: $base-font-family;
+ 	font-size: $header-font-size;
+	font-weight: 300;
+
+	line-height: modular-scale(6);
+	text-align: left;
+  
+	@include fontSmooth;
+}
+
+.bold {
+  font-weight: $base-font-weight-medium;
+}
+
+.italic {
+  font-style: italic;
+}
+
+.uppercase {
+  text-transform: uppercase;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.absolute-center {
+  left: 50%;
+  position: absolute;
+  transform: translateX(-50%)
+}

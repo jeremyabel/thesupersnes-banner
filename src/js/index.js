@@ -2,6 +2,7 @@ import { GLUtils } from './utils/gl-utils';
 
 const RDShader = require( './shaders/reaction-diffusion-shader' );
 const ScreenShader = require ( './shaders/screen-shader' );
+const FeedbackShader = require ( './shaders/feedback-shader' );
 
 // The GL context
 var gl;
@@ -10,15 +11,15 @@ var screenWidth = window.innerWidth;
 var screenHeight = window.innerHeight;
 
 // Framebuffers and textures used to render framebuffers
-var fbo1, fbo2;
-var tex1, tex2;
+var fbo1, fbo2, fbo3, fbo4;
+var tex1, tex2, tex3, tex4;
 
 // Texture dimensions
 const sizeX = 1024;
 const sizeY = 512;
 
 // Shader programs
-var progReaction, progScreen;
+var progReaction, progScreen, progFeedback;
 
 var feedChange = 0.0, killChange = 0.0, logoChange = 0.0;
 var changeLimit = 0.00005;
@@ -68,10 +69,18 @@ var screenUniforms = {
 	tLogo: { type: 't', value: 1 },
 	screenX: { type: '1f', value: screenWidth },
 	screenY: { type: '1f', value: screenHeight },
+	t: { type: '1f', value: 0 }
+};
+
+var feedbackUniforms = {
+	tReaction: { type: 't', value: 0 },
+	tSource: { type: 't', value: 1 },
+	time: { type: '1f', value: 0 }
 };
 
 var lastTime = 0;
 var useSecondBuffer = false;
+var useSecondBuffer2 = false;
 
 var logoTex, eventTex, logoFullTex;
 var eventCanvas, eventContext;
@@ -80,10 +89,11 @@ var logoImage = new Image();
 var logoImageFull = new Image();
 var mouseDown = false;
 var mousePos = { x: 0, y: 0 };
+var enableSite = false;
 
 document.addEventListener( 'DOMContentLoaded', () => {
 
-	(function(){var script=document.createElement('script');script.onload=function(){var stats=new Stats();document.body.appendChild(stats.dom);requestAnimationFrame(function loop(){stats.update();requestAnimationFrame(loop)});};script.src='//rawgit.com/mrdoob/stats.js/master/build/stats.min.js';document.head.appendChild(script);})();
+	// (function(){var script=document.createElement('script');script.onload=function(){var stats=new Stats();document.body.appendChild(stats.dom);requestAnimationFrame(function loop(){stats.update();requestAnimationFrame(loop)});};script.src='//rawgit.com/mrdoob/stats.js/master/build/stats.min.js';document.head.appendChild(script);})();
 
 	window.addEventListener( 'resize', () => { onResize(); } );
 
@@ -102,13 +112,19 @@ document.addEventListener( 'DOMContentLoaded', () => {
 		mouseDown = false;
 	});
 
-	domCanvas.addEventListener( 'mousemove', event => {
+	document.addEventListener( 'mousemove', event => {
 		mousePos.x = event.clientX;
 		mousePos.y = event.clientY;
 
-		reactionUniforms.mx.value = mousePos.x / screenWidth;
-		reactionUniforms.my.value = mousePos.y / screenHeight;
-		console.log( reactionUniforms.mx.value);
+		// console.log( mousePos.x / screenWidth, mousePos.y / screenHeight );
+
+		// if ( enableSite ) {
+			reactionUniforms.mx.value = mousePos.x / screenWidth;
+			reactionUniforms.my.value = mousePos.y / screenHeight;
+		// } else {
+		// 	reactionUniforms.mx.value = 0.5;
+		// 	reactionUniforms.my.value = 0.4;
+		// }
 	});
 
 	gl = domCanvas.getContext( 'webgl', { preserveDrawingBuffer: true } );
@@ -119,6 +135,7 @@ document.addEventListener( 'DOMContentLoaded', () => {
 
 	// Create shader programs
 	progReaction = GLUtils.createAndLinkProgram( gl, RDShader.vertexShader, RDShader.fragmentShader );
+	progFeedback = GLUtils.createAndLinkProgram( gl, FeedbackShader.vertexShader, FeedbackShader.fragmentShader );
 	progScreen = GLUtils.createAndLinkProgram( gl, ScreenShader.vertexShader, ScreenShader.fragmentShader );
 
 	// Prepare the rendering surface
@@ -137,6 +154,14 @@ document.addEventListener( 'DOMContentLoaded', () => {
 	tex2 = GLUtils.createAndBindTexture( gl, glPixels, sizeX, sizeY, fbo2, { 
 		formatType: gl.FLOAT 
 	});
+
+	glPixels = new Uint8Array( GLUtils.getEmptyPixelArray( sizeX, sizeY ) );
+	fbo3 = gl.createFramebuffer();
+	tex3 = GLUtils.createAndBindTexture( gl, glPixels, sizeX, sizeY, fbo3 );
+
+	glPixels = new Uint8Array( GLUtils.getEmptyPixelArray( sizeX, sizeY ) );
+	fbo4 = gl.createFramebuffer();
+	tex4 = GLUtils.createAndBindTexture( gl, glPixels, sizeX, sizeY, fbo4 );
 
 	// Create canvas for sending event information to the GPU
 	eventCanvas = document.createElement( 'canvas' );
@@ -161,9 +186,7 @@ document.addEventListener( 'DOMContentLoaded', () => {
 	eventTex = GLUtils.createTextureFromImage( gl, eventCanvas );
 
 	// Load the logo image
-	// logoImage.onload = onImageLoadComplete;
 	logoImage.src = 'img/logo.png';
-
 	logoImageFull.onload = onImageLoadComplete;
 	logoImageFull.src = 'img/logo.png';
 });
@@ -251,8 +274,21 @@ function update( time ) {
 	screenUniforms.screenX.value = screenWidth;
 	screenUniforms.screenY.value = screenHeight;
 
+	if ( time < 4000 ) {
+		screenUniforms.t.value = 0;
+	} else {
+		screenUniforms.t.value = ( time - 4000 ) / 3000;
+	}
+
+	if ( time > 7000 ) {
+		enableSite = true;
+		document.getElementById( 'content' ).classList.add( 'show' );
+	}
+	// screenUniforms.t.value = Math.min( ( Math.max( time, 4000 / 1000 ) / 4, 1 );
+
+	feedbackUniforms.time.value = time / 1000;
+
 	// Fade out the event canvas contents
-	console.log( time );
 	if ( time > 6000 ) {
 		eventContext.fillStyle = 'rgba( 0, 0, 0, 0.56 )';
 		eventContext.fillRect( 0, 0, sizeX, sizeY );
@@ -273,11 +309,15 @@ function update( time ) {
 	// Update image textures
 	GLUtils.updateImageTexture( gl, eventTex, eventCanvas );
 
+	////////////////////////////////////////////////////////////////
+	// REACTION-DIFFUSION
+	////////////////////////////////////////////////////////////////
+	
 	gl.viewport( 0, 0, sizeX, sizeY );
 
 	// Evaluate the reaction shaders multiple times. The number of iterations determines the speed
 	// of the reaction.
-	for ( var i = 0; i < 4; i++ ) {	
+	for ( var i = 0; i < 6; i++ ) {	
 
 		// Set reaction shader unitofmrs
 		gl.useProgram( progReaction );
@@ -308,13 +348,16 @@ function update( time ) {
 
 		// Swap buffers
 		useSecondBuffer = !useSecondBuffer;
-	}
+	}	
 
-	// Set viewport and screen shader uniforms
-	gl.viewport( 0, 0, screenWidth, screenHeight );
-	gl.useProgram( progScreen );
-	GLUtils.setUniforms( gl, progScreen, screenUniforms );
+	gl.viewport( 0, 0, sizeX, sizeY );
+	gl.useProgram( progFeedback );
+	GLUtils.setUniforms( gl, progFeedback, feedbackUniforms );
 
+	////////////////////////////////////////////////////////////////
+	// FEEDBACK
+	////////////////////////////////////////////////////////////////
+	
 	// Bind the currently active buffer to the TEXTURE0 slot
 	if ( useSecondBuffer ) {
 		gl.activeTexture( gl.TEXTURE0 );
@@ -322,6 +365,40 @@ function update( time ) {
 	} else {
 		gl.activeTexture( gl.TEXTURE0 );
 		gl.bindTexture( gl.TEXTURE_2D, tex1 );
+	}
+
+	if ( useSecondBuffer2 ) {
+		gl.activeTexture( gl.TEXTURE1 );
+		gl.bindTexture( gl.TEXTURE_2D, tex4 );
+		gl.bindFramebuffer( gl.FRAMEBUFFER, fbo3 );
+	} else {
+		gl.activeTexture( gl.TEXTURE1 );
+		gl.bindTexture( gl.TEXTURE_2D, tex3 );
+		gl.bindFramebuffer( gl.FRAMEBUFFER, fbo4 );
+	}
+
+	useSecondBuffer2 = !useSecondBuffer2;
+
+	// Draw full-screen quad to other FBO set
+	gl.drawArrays( gl.TRIANGLE_STRIP, 0, 4 );
+	gl.flush();
+
+	////////////////////////////////////////////////////////////////
+	// TO SCREEN
+	////////////////////////////////////////////////////////////////
+	
+	// Set viewport and screen shader uniforms
+	gl.viewport( 0, 0, screenWidth, screenHeight );
+	gl.useProgram( progScreen );
+	GLUtils.setUniforms( gl, progScreen, screenUniforms );
+
+	// Bind the currently active buffer to the TEXTURE0 slot
+	if ( useSecondBuffer2 ) {
+		gl.activeTexture( gl.TEXTURE0 );
+		gl.bindTexture( gl.TEXTURE_2D, tex3 );
+	} else {
+		gl.activeTexture( gl.TEXTURE0 );
+		gl.bindTexture( gl.TEXTURE_2D, tex4 );
 	}
 
 	// Draw full-screen quad to the screen

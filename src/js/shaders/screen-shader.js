@@ -34,45 +34,24 @@ export const fragmentShader = [
 
 	'uniform sampler2D tSource;',
 	'uniform sampler2D tLogo;',
+	'uniform float t;',
 
-	// 'float halfMask( float a, float b ) {',
-	// 	'return clamp( ( 1.0 - ( abs( a - b ) * 2.0 ) ) * 4096.0, 0.0, 1.0 );',
-	// '}',
+	'const vec3 cb = vec3( 56.0, 58.0, 65.0 ) / 255.0;',
+	// 'const vec3 ca = vec3( 45.0, 46.0, 53.0 ) / 255.0;',
+	'const vec3 ca = vec3( 45.0, 46.0, 53.0 ) / 255.0;',
 
 	'void main() {',
 		'vec4 v = texture2D( tSource, uv );',
-		
-		// 'float mask = halfMask( 0.5, logoUV.x ) * halfMask( 0.5, logoUV.y );',
-		// 'vec4 logo = texture2D( tLogo, logoUV * mask );',
 
-		'float s = -0.5;',	// Brightness
-		'float q = 5.5;',	// Contrast
+		'float s = -0.05;',	// Brightness
+		'float q = 2.0;',	// Contrast
 		
-		'vec4 c = vec4( v.g * q + s, v.g * q + s, v.g * q + s, 1.0 );',
+		'vec4 c = vec4( v.r * q + s, v.g * q + s, v.b * q + s, 1.0 );',
 		'c.rgb = ( c.rgb - 0.5 ) / ( 1.0 - 0.68 ) + 0.5;',
 
-		// 'vec4 black = vec4( vec3( 0.0 ), 1.0 );',
-		// 'vec4 logoMask = mix( black, vec4( 1.0 ), mask * logo.a );',
-		// 'vec4 logo2 = mix( vec4(0.2), logo, logoMask.rrrr );',
+		'vec3 cc = mix( ca, cb, c.rgb );',
 
-		// 'gl_FragColor = 1.0 - v.agrb - logo2.rrrr;',
-		// 'gl_FragColor = clamp( v.raga * 0.5, 0.0, 1.0 );',
-		
-
-		// 'gl_FragColor = v.raga;', // <--- THIS ONE
-		'gl_FragColor = c;',
-
-
-		// 'gl_FragColor = mix( cc, black, 1.0 - logo);',
-
-		// 'gl_FragColor += logo2.rrra * 0.5;',
-		// 'gl_FragColor += black * logo2.rrrr;',
-		// 'gl_FragColor = logo2;',
-		// 'gl_FragColor = mix( v * 1.0, vec4( 0.0, 0.0, 0.0, 1.0 ), texture2D( tLogo, logoUV ) * mask );',
-		// 'gl_FragColor = texture2D( tLogo, logoUV );',
+		'gl_FragColor = vec4( mix( c.rgb, cc, clamp( t, 0.0, 1.0 ) ), 1.0 );',
 	'}'
 
 ].join( '\n' );
-
-// NewValue = (((OldValue - OldMin) * (NewMax - NewMin)) / (OldMax - OldMin)) + NewMin
-// ( uv.x * ( newmax - newmin ) ) + newmin

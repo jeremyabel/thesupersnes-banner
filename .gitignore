@@ -5,6 +5,7 @@
 *.pyc
 *.swp
 *.asd
+*.map
 
 npm-debug.log
 
