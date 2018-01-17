@@ -186,9 +186,9 @@ document.addEventListener( 'DOMContentLoaded', () => {
 	eventTex = GLUtils.createTextureFromImage( gl, eventCanvas );
 
 	// Load the logo image
-	logoImage.src = 'img/logo.png';
+	logoImage.src = 'img/doodle.png';
 	logoImageFull.onload = onImageLoadComplete;
-	logoImageFull.src = 'img/logo.png';
+	logoImageFull.src = 'img/doodle.png';
 });
 
 function onResize() {
@@ -274,13 +274,15 @@ function update( time ) {
 	screenUniforms.screenX.value = screenWidth;
 	screenUniforms.screenY.value = screenHeight;
 
-	if ( time < 4000 ) {
+	var devSpeedup = 1.0;
+
+	if ( time < 4000 * devSpeedup ) {
 		screenUniforms.t.value = 0;
 	} else {
 		screenUniforms.t.value = ( time - 4000 ) / 3000;
 	}
 
-	if ( time > 7000 ) {
+	if ( time > 7000 * devSpeedup ) {
 		enableSite = true;
 		document.getElementById( 'content' ).classList.add( 'show' );
 	}
@@ -289,7 +291,7 @@ function update( time ) {
 	feedbackUniforms.time.value = time / 1000;
 
 	// Fade out the event canvas contents
-	if ( time > 6000 ) {
+	if ( time > 6000 * devSpeedup ) {
 		eventContext.fillStyle = 'rgba( 0, 0, 0, 0.56 )';
 		eventContext.fillRect( 0, 0, sizeX, sizeY );
 	}

@@ -16,11 +16,12 @@ export const vertexShader = [
 	'void main() {',
 		'uv = aTexCoord;',
 
-		'float logoSize = 0.27;',
+		'float logoSize = 0.57;',
 		'float aspect = screenX / screenY;',
 		'vec2 logoSize2 = vec2( logoSize, logoSize * aspect );',
 		
 		'logoUV = ( uv / logoSize2 ) + 0.5 - ( 0.5 / logoSize2 );',
+		'logoUV.y += 0.05;',
 
 		'gl_Position = vec4( aPos, 1.0 );',
 	'}'

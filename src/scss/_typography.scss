@@ -16,18 +16,45 @@ $base-font-weight-medium:   500;
 $body-copy-font-size: modular-scale(0);
 $body-copy-line-height: modular-scale(2);
 
-$header-font-size: modular-scale(5);
+$header-font-size: modular-scale(4);
 
 h1 {
 	color: #FFF;
 	font-family: $base-font-family;
  	font-size: $header-font-size;
 	font-weight: 300;
-
-	line-height: modular-scale(6);
+	line-height: modular-scale(5);
 	text-align: left;
+  margin-bottom: modular-scale(2);
   
 	@include fontSmooth;
+}
+
+h2 {
+  color: #FFF;
+  font-family: $base-font-family;
+  font-size: modular-scale(2);
+  font-weight: 300;
+  line-height: modular-scale(2);
+  text-align: left;
+  margin-bottom: modular-scale(0);
+  
+  @include fontSmooth;
+
+  &#email {
+    margin-top: modular-scale(4);
+  } 
+}
+
+a, a:active, a:link, a:hover {
+  border-bottom: 1px solid #FFF;
+  color: #FFF;
+  text-decoration: none;
+}
+
+a:hover {
+  border-bottom: 1px solid #00fff6;
+  color: #00fff6;
 }
 
 .bold {
