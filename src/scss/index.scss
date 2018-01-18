@@ -1,3 +1,10 @@
+@mixin mobileOnly {
+	@media	only screen and (max-width: 850px)
+			{
+				@content;
+			}
+}
+
 @import "reset";
 @import "bourbon";
 @import "neat";
@@ -28,6 +35,10 @@ section {
 	&.show {
 		opacity: 1.0;
 	}
+
+	@include mobileOnly {
+		margin-top: 60px;	
+	}
 }
 
 #logo {
@@ -40,7 +51,7 @@ section {
 
 canvas {
 	box-sizing: border-box;
-	position: absolute;
+	position: fixed;
 	top: 0;
 	left: 0;
 	border: 12px solid #00fff6;

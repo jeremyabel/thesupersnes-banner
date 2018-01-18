@@ -28,6 +28,11 @@ h1 {
   margin-bottom: modular-scale(2);
   
 	@include fontSmooth;
+
+  @include mobileOnly {
+    font-size: modular-scale(2);    
+    line-height: modular-scale(3);
+  }
 }
 
 h2 {
@@ -43,7 +48,17 @@ h2 {
 
   &#email {
     margin-top: modular-scale(4);
+
+    @include mobileOnly {
+      margin-top: modular-scale(2);
+      margin-bottom: modular-scale(2);
+    }
   } 
+
+  @include mobileOnly {
+    font-size: modular-scale(1);
+    line-height: modular-scale(2);
+  }
 }
 
 a, a:active, a:link, a:hover {
