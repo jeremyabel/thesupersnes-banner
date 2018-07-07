@@ -1,412 +1,361 @@
-import { GLUtils } from './utils/gl-utils';
+import { Tile } from './tile';
+import { ImageLoader } from './image-loader';
+import { MathUtils } from './math-utils';
+import { GLUtils } from './gl-utils';
+import { IntroTransition } from './intro-transition';
+import { ImageTransition } from './image-transition';
+import { GetBaseURL } from './base-url';
 
-const RDShader = require( './shaders/reaction-diffusion-shader' );
-const ScreenShader = require ( './shaders/screen-shader' );
-const FeedbackShader = require ( './shaders/feedback-shader' );
+const GlitchShader = require ( './shaders/glitch-shader' );
+
+// Not used in development environment
+// const fit = require( 'fit.js' ); 
 
 // The GL context
 var gl;
 
-var screenWidth = window.innerWidth;
-var screenHeight = window.innerHeight;
-
-// Framebuffers and textures used to render framebuffers
-var fbo1, fbo2, fbo3, fbo4;
-var tex1, tex2, tex3, tex4;
+const screenWidth = 845;
+const screenHeight = 380;
 
 // Texture dimensions
-const sizeX = 1024;
-const sizeY = 512;
+const sizeX = 512;
+const sizeY = 256;
 
-// Shader programs
-var progReaction, progScreen, progFeedback;
-
-var feedChange = 0.0, killChange = 0.0, logoChange = 0.0;
-var changeLimit = 0.00005;
-
-// The feed and kill values that are cycled through according to provided timing intervals
-const fkModes = [
-	{ f: 0.022, k: 0.055, g: 600, idle: 30000 },
-	{ f: 0.014, k: 0.042, g: 900, idle: 30000 },
-	{ f: 0.011, k: 0.042, g: 600, idle: 30000 },
-	{ f: 0.030, k: 0.057, g: 600, idle: 10000 }
-];
-
-var currentMode = 0;
-var atInitialState = false;
-var initialStateButtons = [];
-
-// Uniforms for the reaction shader
-var reactionUniforms = {
-	tSource: { type: 't', value: 0 },
-	tBrush: { type: 't', value: 1 },
-	tButtons: { type: 't', value: 2 },
-
-	sizeX: { type: '1f', value: sizeX },
-	sizeY: { type: '1f', value: sizeY },
-	screenX: { type: '1f', value: screenWidth },
-	screenY: { type: '1f', value: screenHeight },
-	delta: { type: '1f', value: 1.0 },
-	time: { type: '1f', value: 0.0 },
-	mx: { type: '1f', value: 0.0 },
-	my: { type: '1f', value: 0.0 },
-	
-	feed: { type: '1f', value: fkModes[ currentMode ].f },
-	kill: { type: '1f', value: fkModes[ currentMode ].k },
-	rateA: { type: '1f', value: 0.2097 },
-	rateB: { type: '1f', value: 0.105 },
-	
-	logoAmount: { type: '1f', value: fkModes[ currentMode ].g },
-	logoSize: { type: '1f', value: 0.25 },
-	addLogoPre: { type: '1f', value: 1.0 },
-	addLogoPost: { type: '1f', value: 0.0 },
-	reset: { type: '1f', value: 0.0 }
-};
-
-// Uniforms for the screen shader
-var screenUniforms = {
-	tSource: { type: 't', value: 0 },
-	tLogo: { type: 't', value: 1 },
-	screenX: { type: '1f', value: screenWidth },
-	screenY: { type: '1f', value: screenHeight },
-	t: { type: '1f', value: 0 }
-};
-
-var feedbackUniforms = {
-	tReaction: { type: 't', value: 0 },
-	tSource: { type: 't', value: 1 },
-	time: { type: '1f', value: 0 }
+// Settings for the glitch shader
+var progGlitchShader;
+var glitchShaderUniforms = {
+	tRegularImageA: { type: 't', value: 1 },
+	tRegularImageB: { type: 't', value: 2 },
+	tGlitchedImageA: { type: 't', value: 3 },
+	tGlitchedImageB: { type: 't', value: 4 },
+	tMask: { type: 't', value: 5 },
+	fTime: { type: '1f', value: 0 },
+	glitchAmt: { type: '1f', value: 0 },
 };
 
 var lastTime = 0;
-var useSecondBuffer = false;
-var useSecondBuffer2 = false;
 
-var logoTex, eventTex, logoFullTex;
+var eventTex;
+var regularImageTexA, regularImageTexB;
+var glitchedImageTexA, glitchedImageTexB;
+var initialImage;
 var eventCanvas, eventContext;
-var domCanvas;
-var logoImage = new Image();
-var logoImageFull = new Image();
+var domCanvas, domContext;
+
+var lastTime = 0;
+
 var mouseDown = false;
 var mousePos = { x: 0, y: 0 };
-var enableSite = false;
+var clickPos = { x: 0, y: 0 };
+var mouseForce = 0;
+var mouseForceFiltered = 0;
+const forceAttenuate = 5;
+var transformScale = 1;
+var mouseTiles = [];
+var transitionTiles = [];
+var sleepTimer = 5;
+var texturesReady = false;
+var isShowingInitialImage = true;
 
 document.addEventListener( 'DOMContentLoaded', () => {
 
-	// (function(){var script=document.createElement('script');script.onload=function(){var stats=new Stats();document.body.appendChild(stats.dom);requestAnimationFrame(function loop(){stats.update();requestAnimationFrame(loop)});};script.src='//rawgit.com/mrdoob/stats.js/master/build/stats.min.js';document.head.appendChild(script);})();
+	IntroTransition.init();
 
-	window.addEventListener( 'resize', () => { onResize(); } );
+	// Set up canvas dimensions
+	domCanvas = document.getElementById( 'banner-canvas' );
+	domCanvas.width = screenWidth;
+	domCanvas.height = screenHeight;
 
-	domCanvas = document.getElementById( 'canvas' );
-
-	domCanvas.width = window.innerWidth;
-	domCanvas.height = window.innerHeight;
-	
 	domCanvas.addEventListener( 'mousedown', event => {
 		mouseDown = true;
-		mousePos.x = event.clientX;
-		mousePos.y = event.clientY;
+		switchImages();
+		resetSleepTimer();
 	});
 
-	domCanvas.addEventListener( 'mouseup', event => {
+	domCanvas.addEventListener( 'mousemove', event => {
+		onPointerMove( event );
+		resetSleepTimer();
+	});
+
+	document.addEventListener( 'mouseup', event => {
 		mouseDown = false;
+		resetSleepTimer();
 	});
 
-	document.addEventListener( 'mousemove', event => {
-		mousePos.x = event.clientX;
-		mousePos.y = event.clientY;
-
-		// console.log( mousePos.x / screenWidth, mousePos.y / screenHeight );
-
-		// if ( enableSite ) {
-			reactionUniforms.mx.value = mousePos.x / screenWidth;
-			reactionUniforms.my.value = mousePos.y / screenHeight;
-		// } else {
-		// 	reactionUniforms.mx.value = 0.5;
-		// 	reactionUniforms.my.value = 0.4;
-		// }
+	// Pass mousedown events thru the title text block
+	const titleTextBlock = document.getElementById( 'homepage-title' );
+	titleTextBlock.addEventListener( 'mousedown', event => {
+		mouseDown = true;
+		switchImages();
+		resetSleepTimer();
 	});
 
-	gl = domCanvas.getContext( 'webgl', { preserveDrawingBuffer: true } );
-
-	// Enable floating point textures
-	gl.getExtension( 'OES_texture_float' );
-	gl.getExtension( 'OES_texture_float_linear' );
-
-	// Create shader programs
-	progReaction = GLUtils.createAndLinkProgram( gl, RDShader.vertexShader, RDShader.fragmentShader );
-	progFeedback = GLUtils.createAndLinkProgram( gl, FeedbackShader.vertexShader, FeedbackShader.fragmentShader );
-	progScreen = GLUtils.createAndLinkProgram( gl, ScreenShader.vertexShader, ScreenShader.fragmentShader );
-
-	// Prepare the rendering surface
-	GLUtils.prepareSurface( gl, progScreen, 'aPos', 'aTexCoord' );
-
-	// Create framebuffer textures and initialize them with empty pixels
-	var glPixels;
-	glPixels = new Float32Array( GLUtils.getEmptyPixelArray( sizeX, sizeY ) );
-	fbo1 = gl.createFramebuffer();
-	tex1 = GLUtils.createAndBindTexture( gl, glPixels, sizeX, sizeY, fbo1, { 
-		formatType: gl.FLOAT 
+	// Pass mousemove events thru the title text block
+	titleTextBlock.addEventListener( 'mousemove', event => {
+		onPointerMove( event );
+		resetSleepTimer();
 	});
 
-	glPixels = new Float32Array( GLUtils.getEmptyPixelArray( sizeX, sizeY ) );
-	fbo2 = gl.createFramebuffer();
-	tex2 = GLUtils.createAndBindTexture( gl, glPixels, sizeX, sizeY, fbo2, { 
-		formatType: gl.FLOAT 
-	});
-
-	glPixels = new Uint8Array( GLUtils.getEmptyPixelArray( sizeX, sizeY ) );
-	fbo3 = gl.createFramebuffer();
-	tex3 = GLUtils.createAndBindTexture( gl, glPixels, sizeX, sizeY, fbo3 );
-
-	glPixels = new Uint8Array( GLUtils.getEmptyPixelArray( sizeX, sizeY ) );
-	fbo4 = gl.createFramebuffer();
-	tex4 = GLUtils.createAndBindTexture( gl, glPixels, sizeX, sizeY, fbo4 );
-
-	// Create canvas for sending event information to the GPU
-	eventCanvas = document.createElement( 'canvas' );
+	// Create canvas for sending cursor and click event information to the WebGL shader. 
+	// If there is an HTML element for the event canvas, use that. Otherwise create a new one.
+	// In the development environment, it is helpful to see the event canvas, but it can be 
+	// removed in the production environment.
+	eventCanvas = document.getElementById( 'event-canvas' ) || document.createElement( 'canvas' );
 	eventCanvas.width = sizeX;
 	eventCanvas.height = sizeY;
+
+	// Initialize the event canvas with a solid black fill
 	eventContext = eventCanvas.getContext( '2d' );
 	eventContext.fillStyle = 'rgba(0,0,0,1)';
 	eventContext.fillRect( 0, 0, sizeX, sizeY );
 
-	// for ( let i = 0; i < 20; i++ ) {
-	// 	eventContext.save();
-	// 	eventContext.scale( sizeX / screenWidth, sizeY / screenHeight );
-	// 	eventContext.fillStyle = '#FFF';
+	gl = domCanvas.getContext( 'webgl' );
 
-	// 	eventContext.beginPath();
-	// 	eventContext.arc( Math.random() * screenWidth, Math.random() * screenHeight, 30, 0, Math.PI * 2, true);
-	// 	eventContext.fill();
+	// Prepare the glitch shader
+	progGlitchShader = GLUtils.createAndLinkProgram( gl, GlitchShader.vertexShader, GlitchShader.fragmentShader );
 
-	// 	eventContext.restore();
-	// }
+	// Prepare the rendering surface
+	GLUtils.prepareSurface( gl, progGlitchShader, 'aPos', 'aTexCoord' );
 
+	// Create a GL texture using the eventCanvas
 	eventTex = GLUtils.createTextureFromImage( gl, eventCanvas );
 
-	// Load the logo image
-	logoImage.src = 'img/doodle.png';
-	logoImageFull.onload = onImageLoadComplete;
-	logoImageFull.src = 'img/doodle.png';
+	// Load the game images, then play the intro transition and switch to the first game image.
+	ImageLoader.on( 'complete', () => {
+		IntroTransition.play( 0.05, 0.2 );
+		setImagesToTextures();
+		switchImages({ 
+			x: 80, 
+			y: 100
+		});
+	});
+
+	ImageLoader.load();
+
+	// Use the fit.js library to deal with resizing issues when the banner is inside the production wordpress
+	// environment. This has been commented out here because it is not required in the development environment.
+	//
+	// const bannerContainer = document.getElementById( 'homepage-banner' );
+	// const bannerParent = document.getElementById( 'homepage-banner-parent' );
+	// fit( bannerContainer, bannerParent, { watch: true, vAlign: fit.TOP } );
+	// fit( bannerContainer, bannerParent, { watch: true, vAlign: fit.TOP }, transform => {
+	// 	transformScale = transform.scale;
+	// 	bannerParent.style.height = screenHeight * transformScale + 'px';
+	// });
+
+	window.requestAnimationFrame( update );
 });
 
-function onResize() {
-	screenWidth = window.innerWidth;
-	screenHeight = window.innerHeight;
-	domCanvas.width = screenWidth;
-	domCanvas.height = screenHeight;
+function onPointerMove( event ) {
+	// Get x and y coordinates from either a touch event or the mouse cursor
+	var x = 'ontouchstart' in window ? event.touches[0].clientX : event.clientX;
+	var y = 'ontouchstart' in window ? event.touches[0].clientY : event.clientY;
+
+	// Transform to canvas space
+	x -= domCanvas.getBoundingClientRect().left;
+	y -= domCanvas.getBoundingClientRect().top;
+	x *= sizeX / ( screenWidth * transformScale );
+	y *= sizeY / ( screenHeight * transformScale );
+
+	const dx = x - mousePos.x;
+	const dy = y - mousePos.y;
+
+	mousePos = { x: x, y: y };
+	mouseForce += ( Math.sqrt( dx * dx + dy * dy ) - mouseForce ) / 4;
+
+	// Get 3 random positions centered around the cursor's position
+	const scatterPos1 = { x: mousePos.x + MathUtils.random( 0, dx ), y: mousePos.y + MathUtils.random( 0, dy ) };
+	const scatterPos2 = { x: mousePos.x + MathUtils.random( 0, dx ), y: mousePos.y + MathUtils.random( 0, dy ) };
+	const scatterPos3 = { x: mousePos.x + MathUtils.random( 0, dx ), y: mousePos.y + MathUtils.random( 0, dy ) };
+
+	// Add 3 new tiles using the scattered positions. Tile size is larger with more mouse force
+	mouseTiles.push( new Tile( scatterPos1, mouseForce / forceAttenuate ) );
+	mouseTiles.push( new Tile( scatterPos2, mouseForce / forceAttenuate ) );
+	mouseTiles.push( new Tile( scatterPos3, mouseForce / forceAttenuate ) );
+}
+
+function switchImages( manualClickPos ) {
+	if ( !ImageTransition.isPlayingTransition ) {
+		ImageTransition.playTransition();
+
+		if ( manualClickPos !== undefined ) {
+			clickPos = { x: manualClickPos.x, y: manualClickPos.y };
+		} else {
+			clickPos = { x: mousePos.x, y: mousePos.y };	
+		}
+		
+		// Clear transition tiles pool
+		transitionTiles = [];
+		
+		// Wait for the transition to finish before switching to the next image
+		ImageTransition.once( 'transition-complete', () => {
+
+			// Delay to prevent mouse mashery 
+			setTimeout( () => {
+
+				// The initial image is not part of the set of game images, so remove it
+				// if it is being shown. Otherwise, increment the image index normally.
+				if ( isShowingInitialImage ) {
+					ImageLoader.gameImages.shift();
+					isShowingInitialImage = false;
+				} else {
+					ImageLoader.incrementImageIndex();	
+				}
+				
+				ImageTransition.resetTransition();
+				setImagesToTextures();
+			}, 1);
+		});
+	}
+}
+
+function setImagesToTextures() {
+	const imageInfoA = ImageLoader.getCurrentImageInfo();
+	const imageInfoB = ImageLoader.getNextImageInfo();
+
+	// Create GL textures if they haven't been created yet
+	if ( !texturesReady ) {
+		regularImageTexA = GLUtils.createTextureFromImage( gl, imageInfoA.regularImage );
+		regularImageTexB = GLUtils.createTextureFromImage( gl, imageInfoB.regularImage );
+		glitchedImageTexA = GLUtils.createTextureFromImage( gl, imageInfoA.glitchedImage );
+		glitchedImageTexB = GLUtils.createTextureFromImage( gl, imageInfoB.glitchedImage );
+		texturesReady = true;
+	}
+
+	GLUtils.updateImageTexture( gl, regularImageTexA, imageInfoA.regularImage );
+	GLUtils.updateImageTexture( gl, regularImageTexB, imageInfoB.regularImage );
+	GLUtils.updateImageTexture( gl, glitchedImageTexA, imageInfoA.glitchedImage );
+	GLUtils.updateImageTexture( gl, glitchedImageTexB, imageInfoB.glitchedImage );
+
+	resetSleepTimer();
+}
+
+function resetSleepTimer() {
+	sleepTimer = 5;
 }
 
 /**
- * Event listener for imageLoadComplete. Sets logo textures and starts the update loop.
- */
-function onImageLoadComplete() {
-	logoTex = GLUtils.createTextureFromImage( gl, logoImage );
-	logoFullTex = GLUtils.createTextureFromImage( gl, logoImageFull );
-	lastTime = new Date().getTime();
-	window.requestAnimationFrame( update );
-}
-
-/**
- * Updates the state of the reaction and renders it to the screen
+ * Update the state of the banner and render it to the screen
  */
 function update( time ) {
 
-	// // Apply changes to feed value
-	// if ( !almostEqual( reactionUniforms.feed.value, fkModes[ currentMode ].f) && feedChange !== 0 ) {
-	// 	reactionUniforms.feed.value += feedChange * changeLimit;
-	// } else {
-	// 	feedChange = 0;
-	// }
-
-	// // Apply changes to kill value
-	// if ( !almostEqual( reactionUniforms.kill.value, fkModes[ currentMode ].k ) && killChange !== 0 ) {
-	// 	reactionUniforms.kill.value += killChange * changeLimit;
-	// } else {
-	// 	killChange = 0;
-	// }
-
-	// // Apply changes to logo amount value
-	// if ( !almostEqual(reactionUniforms.logoAmount.value, fkModes[ currentMode ].g) && logoChange !== 0 ) {
-	// 	reactionUniforms.logoAmount.value += logoChange * ( changeLimit * 10000 );
-	// } else {
-	// 	logoChange = 0;
-	// }
-
-	// // If the idle timer is up, trigger the feed and kill values to shift, and restart the timer
-	// if ( !idleTimer.hasStarted() && 
-	// 		feedChange == 0 && 
-	// 		killChange == 0 && 
-	// 		logoChange == 0 && 
-	// 		atInitialState ) {
-	// 	idleTimer.start(function() {
-	// 		var df = fkModes[currentMode].f,
-	// 				dk = fkModes[currentMode].k,
-	// 				dg = fkModes[currentMode].g;
-
-	// 		currentMode = (currentMode + 1) % fkModes.length;
-
-	// 		df -= fkModes[currentMode].f;
-	// 		dk -= fkModes[currentMode].k;
-	// 		dg -= fkModes[currentMode].g;
-
-	// 		feedChange = Math.sign(df) * -1;
-	// 		killChange = Math.sign(dk) * -1;
-	// 		logoChange = Math.sign(dg) * -1;
-
-	// 	}, fkModes[currentMode].idle);
-	// }
-
 	// Calculate delta time
-	var dt = ( time - lastTime ) / 2;
-	if ( dt > 0.8 || dt <= 0 ) {
-		dt = 0.8;
-	}
-	lastTime = dt;
+	var dt = ( time - lastTime ) / 20;
+	lastTime = time;
+	const dtSlow = dt / 50;
 
-	// Update uniforms
-	reactionUniforms.delta.value = dt;
-	reactionUniforms.time.value = time;
-	reactionUniforms.screenX.value = screenWidth;
-	reactionUniforms.screenY.value = screenHeight;
+	sleepTimer = Math.max( 0, sleepTimer - dtSlow );
 
-	screenUniforms.screenX.value = screenWidth;
-	screenUniforms.screenY.value = screenHeight;
-
-	var devSpeedup = 1.0;
-
-	if ( time < 4000 * devSpeedup ) {
-		screenUniforms.t.value = 0;
-	} else {
-		screenUniforms.t.value = ( time - 4000 ) / 3000;
-	}
-
-	if ( time > 7000 * devSpeedup ) {
-		enableSite = true;
-		document.getElementById( 'content' ).classList.add( 'show' );
-	}
-	// screenUniforms.t.value = Math.min( ( Math.max( time, 4000 / 1000 ) / 4, 1 );
-
-	feedbackUniforms.time.value = time / 1000;
-
-	// Fade out the event canvas contents
-	if ( time > 6000 * devSpeedup ) {
-		eventContext.fillStyle = 'rgba( 0, 0, 0, 0.56 )';
-		eventContext.fillRect( 0, 0, sizeX, sizeY );
-	}
-
-	if ( mouseDown ) {
-		eventContext.save();
-		eventContext.scale( sizeX / screenWidth, sizeY / screenHeight );
-		eventContext.fillStyle = '#FFF';
-
-		eventContext.beginPath();
-		eventContext.arc(mousePos.x, mousePos.y, 30, 0, Math.PI * 2, true);
-		eventContext.fill();
-
-		eventContext.restore();
-	}
-
-	// Update image textures
-	GLUtils.updateImageTexture( gl, eventTex, eventCanvas );
+	mouseForceFiltered += (mouseForce - mouseForceFiltered) / (5 / dt);
 
 	////////////////////////////////////////////////////////////////
-	// REACTION-DIFFUSION
+	// Cursor Brush Rect FX
 	////////////////////////////////////////////////////////////////
-	
-	gl.viewport( 0, 0, sizeX, sizeY );
 
-	// Evaluate the reaction shaders multiple times. The number of iterations determines the speed
-	// of the reaction.
-	for ( var i = 0; i < 6; i++ ) {	
+	// Set up composition mode and clear the screen
+	eventContext.globalCompositeOperation = 'source-over';
+	eventContext.fillStyle = 'rgba(0,0,0,1)';
+	eventContext.fillRect( 0, 0, sizeX, sizeY );
 
-		// Set reaction shader unitofmrs
-		gl.useProgram( progReaction );
-		GLUtils.setUniforms( gl, progReaction, reactionUniforms );
+	// Red is used for masking the glitched and non-glitched images in the shader
+	eventContext.fillStyle = '#F00';
 
-		// Bind logo brush texture
-		gl.activeTexture( gl.TEXTURE1 );
-		gl.bindTexture( gl.TEXTURE_2D, logoTex );
+	// Update mouse tiles
+	mouseTiles.filter( tile => { return !tile.killMe; } ).forEach( tile => {
+		tile.tick( dtSlow );
+		var rect = tile.getRect();
+		eventContext.fillRect( rect.x, rect.y, rect.w, rect.h );
+	});
 
-		// Bind button texture
-		gl.activeTexture( gl.TEXTURE2 );
-		gl.bindTexture( gl.TEXTURE_2D, eventTex );
+	////////////////////////////////////////////////////////////////
+	// Image Transition Rect FX
+	////////////////////////////////////////////////////////////////
 
-		// Bind source double-buffered texture
-		if ( useSecondBuffer ) {
-			gl.activeTexture( gl.TEXTURE0 );
-			gl.bindTexture( gl.TEXTURE_2D, tex2 );
-			gl.bindFramebuffer( gl.FRAMEBUFFER, fbo1 );
-		} else {
-			gl.activeTexture( gl.TEXTURE0 );
-			gl.bindTexture( gl.TEXTURE_2D, tex1 );
-			gl.bindFramebuffer( gl.FRAMEBUFFER, fbo2 );
+	if ( ImageTransition.isPlayingTransition ) {
+
+		// Green is used to for masking between Image A and Image B in the shader
+		eventContext.fillStyle = '#0F0';
+
+		// Preserve red channel mouse trails by adding green rather than overwriting
+		eventContext.globalCompositeOperation = 'lighten';
+
+		const nTilesToAdd = Math.floor( ImageTransition.transitionProgress * screenWidth / 10 );
+
+		// Spawn tiles in a circle radiating outwards from the click origin
+		for ( var i = 0; i < nTilesToAdd; i++ ) {
+			const t = i * ( ( 2 * Math.PI ) / nTilesToAdd );
+			const r = ImageTransition.transitionProgress * screenWidth;
+			const x = clickPos.x + ( Math.sin( t ) * r );
+			const y = clickPos.y + ( Math.cos( t ) * r );
+			const newTile = new Tile( { x: x, y: y }, 5 );
+			newTile.speed = 1.2;
+
+			// These tiles should not transition out
+			newTile.playClear = false;
+			
+			transitionTiles.push( newTile );
 		}
 
-		// Draw full-screen quad to the bound framebuffer
+		// Update transition tiles
+		transitionTiles.forEach( tile => {
+			tile.tick( dtSlow );
+			const rect = tile.getRect();
+			eventContext.fillRect( rect.x, rect.y, rect.w, rect.h );
+		});
+	}
+
+	////////////////////////////////////////////////////////////////
+	// WebGL Rendering
+	////////////////////////////////////////////////////////////////
+	
+	if ( texturesReady && sleepTimer > 0 ) {
+
+		// Update the event texture
+		GLUtils.updateImageTexture( gl, eventTex, eventCanvas );
+
+		// Increment shader time value
+		glitchShaderUniforms.fTime.value = time / 1000;
+
+		// More mouse force = more glitchy
+		glitchShaderUniforms.glitchAmt.value = mouseForceFiltered / 40;
+
+		gl.viewport( 0, 0, screenWidth, screenHeight );
+
+		// Set screen shader uniforms
+		gl.useProgram( progGlitchShader );
+		GLUtils.setUniforms( gl, progGlitchShader, glitchShaderUniforms );
+
+		// Bind regular A texture
+		gl.activeTexture( gl.TEXTURE1 );
+		gl.bindTexture( gl.TEXTURE_2D, regularImageTexA );
+
+		// Bind regular B texture
+		gl.activeTexture( gl.TEXTURE2 );
+		gl.bindTexture( gl.TEXTURE_2D, regularImageTexB );
+
+		// Bind glitched A texture
+		gl.activeTexture( gl.TEXTURE3 );
+		gl.bindTexture( gl.TEXTURE_2D, glitchedImageTexA );
+
+		// Bind glitched B texture
+		gl.activeTexture( gl.TEXTURE4 );
+		gl.bindTexture( gl.TEXTURE_2D, glitchedImageTexB );
+
+		// Bind mask texture
+		gl.activeTexture( gl.TEXTURE5 );
+		gl.bindTexture( gl.TEXTURE_2D, eventTex );
+
+		// Draw quad to the screen
+		gl.bindFramebuffer( gl.FRAMEBUFFER, null );
 		gl.drawArrays( gl.TRIANGLE_STRIP, 0, 4 );
 		gl.flush();
-
-		// Swap buffers
-		useSecondBuffer = !useSecondBuffer;
-	}	
-
-	gl.viewport( 0, 0, sizeX, sizeY );
-	gl.useProgram( progFeedback );
-	GLUtils.setUniforms( gl, progFeedback, feedbackUniforms );
-
-	////////////////////////////////////////////////////////////////
-	// FEEDBACK
-	////////////////////////////////////////////////////////////////
-	
-	// Bind the currently active buffer to the TEXTURE0 slot
-	if ( useSecondBuffer ) {
-		gl.activeTexture( gl.TEXTURE0 );
-		gl.bindTexture( gl.TEXTURE_2D, tex2 );
-	} else {
-		gl.activeTexture( gl.TEXTURE0 );
-		gl.bindTexture( gl.TEXTURE_2D, tex1 );
 	}
 
-	if ( useSecondBuffer2 ) {
-		gl.activeTexture( gl.TEXTURE1 );
-		gl.bindTexture( gl.TEXTURE_2D, tex4 );
-		gl.bindFramebuffer( gl.FRAMEBUFFER, fbo3 );
-	} else {
-		gl.activeTexture( gl.TEXTURE1 );
-		gl.bindTexture( gl.TEXTURE_2D, tex3 );
-		gl.bindFramebuffer( gl.FRAMEBUFFER, fbo4 );
-	}
+	mouseForce = 0;
 
-	useSecondBuffer2 = !useSecondBuffer2;
-
-	// Draw full-screen quad to other FBO set
-	gl.drawArrays( gl.TRIANGLE_STRIP, 0, 4 );
-	gl.flush();
-
-	////////////////////////////////////////////////////////////////
-	// TO SCREEN
-	////////////////////////////////////////////////////////////////
-	
-	// Set viewport and screen shader uniforms
-	gl.viewport( 0, 0, screenWidth, screenHeight );
-	gl.useProgram( progScreen );
-	GLUtils.setUniforms( gl, progScreen, screenUniforms );
-
-	// Bind the currently active buffer to the TEXTURE0 slot
-	if ( useSecondBuffer2 ) {
-		gl.activeTexture( gl.TEXTURE0 );
-		gl.bindTexture( gl.TEXTURE_2D, tex3 );
-	} else {
-		gl.activeTexture( gl.TEXTURE0 );
-		gl.bindTexture( gl.TEXTURE_2D, tex4 );
-	}
-
-	// Draw full-screen quad to the screen
-	gl.bindFramebuffer( gl.FRAMEBUFFER, null );
-	gl.drawArrays( gl.TRIANGLE_STRIP, 0, 4 );
-	gl.flush();
+	// Update transition animations
+	ImageTransition.tick( dt / 70 );
+	IntroTransition.tick( dt / 50 );
 
 	window.requestAnimationFrame( update );
 }

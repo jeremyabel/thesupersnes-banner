@@ -1,63 +1,49 @@
-@mixin mobileOnly {
-	@media	only screen and (max-width: 850px)
-			{
-				@content;
-			}
+@font-face { 
+	font-family: 'Cubano';
+	src: url('http://www.jeremyabel.com/css/cubano-regular-webfont.eot');
+	src: url('http://www.jeremyabel.com/css/cubano-regular-webfont.eot?#iefix') format('embedded-opentype'),
+	     url('http://www.jeremyabel.com/css/cubano-regular-webfont.woff') format('woff'),
+	     url('http://www.jeremyabel.com/css/cubano-regular-webfont.ttf') format('truetype'),
+	     url('http://www.jeremyabel.com/css/cubano-regular-webfont.svg#webfont') format('svg');
 }
 
-@import "reset";
-@import "bourbon";
-@import "neat";
-@import "grid-settings";
-@import "colors";
-@import "typography";
-@import "spans";
+#homepage-banner {
 
-section {
-	@include outer-container;
-
-	&.full-width {
-		@include outer-container(100%);
-	}
-
-	img {
-		width: 100%;
+	canvas {
+		cursor: pointer;
+		margin: 0;
+		padding: 0;
 	}
 }
 
-#content {
-	position: relative;
-	margin-top: 180px;
-	z-index: 1;
-	opacity: 0;
-	transition: opacity 1s;
+#homepage-title {
+	cursor: pointer;
+	position: absolute;
+	top: 90px;
+	margin-left: 22px;
 
-	&.show {
-		opacity: 1.0;
-	}
+	h1 {
+		user-select: none;
+		font-family: "Cubano";
+		background: #000;
+		color: #FFF;
+		display: inline-block;
+		padding-left: 22px;
+		padding-right: 22px;
+		font-size: 100px;
+		line-height: 98px;
+		height: 108px;
+		visibility: hidden;
+		margin: 0;
 
-	@include mobileOnly {
-		margin-top: 60px;	
+		&.intro-show {
+			visibility: visible;
+		}
 	}
 }
 
-#logo {
-	margin: 0 auto;
-	padding-left: 20px;
-	padding-right: 20px;
-	padding-bottom: 40px;
-	width: 200px;
-}
-
-canvas {
-	box-sizing: border-box;
-	position: fixed;
-	top: 0;
-	left: 0;
-	border: 12px solid #00fff6;
-	z-index: 0;
-	margin: 0;
-	padding: 0;
-	width: 100%;
-	height: 100%;
+#banner-parent {
+	position: absolute;
+	top: 197px;
+	left: 68px;
 }

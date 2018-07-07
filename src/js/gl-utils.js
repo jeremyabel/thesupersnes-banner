@@ -14,6 +14,15 @@
  * limitations under the license.
  */
 
+/**
+ * GLUtils
+ *
+ * Static class which has functions for setting up and rendering shaders and textures on a simple 2-triangle 
+ * plane surface, facing the camera. 
+ *
+ * This class is derived from the the version I wrote for anypixel.js for Google:
+ * https://github.com/googlecreativelab/anypixel/blob/master/frontend/examples/heatmap/src/gl-utils.js
+ */
 class StaticGLUtils {
 
 	/**
