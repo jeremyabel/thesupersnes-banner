@@ -8,6 +8,7 @@
 *.map
 
 npm-debug.log
+package-lock.json
 
 public/index.js
 public/index.css
